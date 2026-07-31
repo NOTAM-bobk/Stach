@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS links (
   group_id TEXT,
   url TEXT NOT NULL,
   title TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 
