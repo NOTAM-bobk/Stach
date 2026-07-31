@@ -29,10 +29,11 @@ export const api = {
   deleteGroup: (token, id) =>
     request(`/api/groups/${id}`, { method: 'DELETE', token }),
 
-  getLinks: (token, { groupId, search } = {}) => {
+  getLinks: (token, { groupId, search, sort } = {}) => {
     const params = new URLSearchParams()
     if (groupId) params.set('groupId', groupId)
     if (search) params.set('search', search)
+    if (sort) params.set('sort', sort)
     const qs = params.toString()
     return request(`/api/links${qs ? `?${qs}` : ''}`, { token })
   },
@@ -41,5 +42,10 @@ export const api = {
   updateLink: (token, id, link) =>
     request(`/api/links/${id}`, { method: 'PUT', token, body: link }),
   deleteLink: (token, id) =>
-    request(`/api/links/${id}`, { method: 'DELETE', token })
+    request(`/api/links/${id}`, { method: 'DELETE', token }),
+  togglePin: (token, id) =>
+    request(`/api/links/${id}/pin`, { method: 'POST', token }),
+
+  getMetadata: (token, url) =>
+    request(`/api/metadata?url=${encodeURIComponent(url)}`, { token })
 }
