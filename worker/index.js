@@ -110,6 +110,16 @@ async function requireUser(request, env) {
   return payload.sub
 }
 
+function decodeEntities(str) {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .trim()
+}
+
 // ---------- route handlers ----------
 
 async function handleRegister(request, env) {
@@ -147,13 +157,29 @@ async function handleLogin(request, env) {
   return json({ token })
 }
 
-async function handleGetGroups(request, env, userId) {
+async function handleGetGroups(env, userId) {
   const { results } = await env.DB.prepare(
-    'SELECT id, name, color, created_at FROM groups WHERE user_id = ? ORDER BY created_at DESC'
+    `SELECT groups.id, groups.name, groups.color, groups.created_at, COUNT(links.id) as link_count
+     FROM groups LEFT JOIN links ON links.group_id = groups.id
+     WHERE groups.user_id = ?
+     GROUP BY groups.id
+     ORDER BY groups.created_at DESC`
   )
     .bind(userId)
     .all()
-  return json({ groups: results })
+
+  const totals = await env.DB.prepare(
+    `SELECT COUNT(*) as total, SUM(CASE WHEN group_id IS NULL THEN 1 ELSE 0 END) as uncategorized
+     FROM links WHERE user_id = ?`
+  )
+    .bind(userId)
+    .first()
+
+  return json({
+    groups: results,
+    totalLinks: totals?.total || 0,
+    uncategorizedLinks: totals?.uncategorized || 0
+  })
 }
 
 async function handleCreateGroup(request, env, userId) {
@@ -178,13 +204,16 @@ async function handleGetLinks(request, env, userId) {
   const url = new URL(request.url)
   const groupId = url.searchParams.get('groupId')
   const search = url.searchParams.get('search')
+  const sort = url.searchParams.get('sort') || 'newest'
 
   let query = `SELECT links.*, groups.name as group_name, groups.color as group_color
                FROM links LEFT JOIN groups ON links.group_id = groups.id
                WHERE links.user_id = ?`
   const params = [userId]
 
-  if (groupId) {
+  if (groupId === 'none') {
+    query += ' AND links.group_id IS NULL'
+  } else if (groupId) {
     query += ' AND links.group_id = ?'
     params.push(groupId)
   }
@@ -192,7 +221,11 @@ async function handleGetLinks(request, env, userId) {
     query += ' AND (links.title LIKE ? OR links.url LIKE ?)'
     params.push(`%${search}%`, `%${search}%`)
   }
-  query += ' ORDER BY links.created_at DESC'
+
+  let orderBy = 'links.pinned DESC, links.created_at DESC'
+  if (sort === 'oldest') orderBy = 'links.pinned DESC, links.created_at ASC'
+  if (sort === 'title') orderBy = 'links.pinned DESC, links.title COLLATE NOCASE ASC'
+  query += ` ORDER BY ${orderBy}`
 
   const { results } = await env.DB.prepare(query)
     .bind(...params)
@@ -204,7 +237,9 @@ async function handleCreateLink(request, env, userId) {
   const { url, title, groupId } = await request.json()
   if (!url) return error('A URL is required')
   const id = crypto.randomUUID()
-  await env.DB.prepare('INSERT INTO links (id, user_id, group_id, url, title, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+  await env.DB.prepare(
+    'INSERT INTO links (id, user_id, group_id, url, title, pinned, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
+  )
     .bind(id, userId, groupId || null, url, title || '', Date.now())
     .run()
   return json({ id })
@@ -221,6 +256,42 @@ async function handleUpdateLink(request, env, userId, linkId) {
 async function handleDeleteLink(env, userId, linkId) {
   await env.DB.prepare('DELETE FROM links WHERE id = ? AND user_id = ?').bind(linkId, userId).run()
   return json({ ok: true })
+}
+
+async function handleTogglePin(env, userId, linkId) {
+  const link = await env.DB.prepare('SELECT pinned FROM links WHERE id = ? AND user_id = ?')
+    .bind(linkId, userId)
+    .first()
+  if (!link) return error('Not found', 404)
+  const next = link.pinned ? 0 : 1
+  await env.DB.prepare('UPDATE links SET pinned = ? WHERE id = ? AND user_id = ?').bind(next, linkId, userId).run()
+  return json({ pinned: !!next })
+}
+
+async function handleGetMetadata(request, env) {
+  const url = new URL(request.url)
+  const target = url.searchParams.get('url')
+  if (!target) return error('A url query param is required')
+
+  let parsed
+  try {
+    parsed = new URL(target)
+  } catch {
+    return error('Invalid URL')
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return error('Invalid URL')
+
+  try {
+    const res = await fetch(parsed.toString(), {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; StachesBot/1.0)' }
+    })
+    const html = await res.text()
+    const match = html.match(/<title[^>]*>([^<]*)<\/title>/i)
+    const title = match ? decodeEntities(match[1]) : ''
+    return json({ title })
+  } catch {
+    return json({ title: '' })
+  }
 }
 
 // ---------- router ----------
@@ -241,7 +312,7 @@ export default {
       // everything below requires a valid token
       const userId = await requireUser(request, env)
 
-      if (path === '/api/groups' && request.method === 'GET') return await handleGetGroups(request, env, userId)
+      if (path === '/api/groups' && request.method === 'GET') return await handleGetGroups(env, userId)
       if (path === '/api/groups' && request.method === 'POST') return await handleCreateGroup(request, env, userId)
 
       const groupMatch = path.match(/^\/api\/groups\/([^/]+)$/)
@@ -249,6 +320,10 @@ export default {
 
       if (path === '/api/links' && request.method === 'GET') return await handleGetLinks(request, env, userId)
       if (path === '/api/links' && request.method === 'POST') return await handleCreateLink(request, env, userId)
+      if (path === '/api/metadata' && request.method === 'GET') return await handleGetMetadata(request, env)
+
+      const pinMatch = path.match(/^\/api\/links\/([^/]+)\/pin$/)
+      if (pinMatch && request.method === 'POST') return await handleTogglePin(env, userId, pinMatch[1])
 
       const linkMatch = path.match(/^\/api\/links\/([^/]+)$/)
       if (linkMatch && request.method === 'PUT') return await handleUpdateLink(request, env, userId, linkMatch[1])
