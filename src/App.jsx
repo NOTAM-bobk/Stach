@@ -8,6 +8,9 @@ export default function App() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
+    const savedTheme = localStorage.getItem('staches_theme') || 'light'
+    document.documentElement.setAttribute('data-theme', savedTheme)
+
     const savedToken = localStorage.getItem('staches_token')
     const savedEmail = localStorage.getItem('staches_email')
     if (savedToken && savedEmail) {
@@ -20,6 +23,7 @@ export default function App() {
   function handleAuth(newToken, email) {
     localStorage.setItem('staches_token', newToken)
     localStorage.setItem('staches_email', email)
+    localStorage.setItem('staches_onboarded', '1')
     setToken(newToken)
     setUser({ email })
   }
@@ -33,9 +37,14 @@ export default function App() {
 
   if (!ready) return null
 
-  return token && user ? (
-    <Dashboard token={token} user={user} onLogout={handleLogout} />
-  ) : (
-    <Onboarding onAuth={handleAuth} />
+  return (
+    <>
+      <div className="bg-fx" aria-hidden="true" />
+      {token && user ? (
+        <Dashboard token={token} user={user} onLogout={handleLogout} />
+      ) : (
+        <Onboarding onAuth={handleAuth} />
+      )}
+    </>
   )
 }
