@@ -9,24 +9,6 @@
     <meta name="apple-mobile-web-app-title" content="Staches" />
     <meta name="format-detection" content="telephone=no" />
     <title>Staches — save it for later</title>
-
-    <!-- Redirect first-time visitors to landing page unless they pass ?showLanding=1 -->
-    <script>
-      (function(){
-        try {
-          var params = new URLSearchParams(window.location.search);
-          // If developer/testing wants to force the landing page, add ?showLanding=1 to URL.
-          if (!params.has('showLanding')) {
-            if (!localStorage.getItem('stach_seen_landing')) {
-              window.location.replace('/landing.html');
-            }
-          }
-        } catch (e) {
-          // ignore storage/access errors
-        }
-      })();
-    </script>
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
