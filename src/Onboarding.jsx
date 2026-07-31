@@ -5,7 +5,7 @@ const SLIDES = [
   {
     mark: '01',
     title: 'Drop in a link, done',
-    desc: 'Paste any URL and Staches keeps it — no folders to dig through, no bookmarks bar to lose it in.'
+    desc: 'Paste any URL and Staches fetches the page title for you — no folders to dig through, no bookmarks bar to lose it in.'
   },
   {
     mark: '02',
@@ -15,22 +15,29 @@ const SLIDES = [
   {
     mark: '03',
     title: 'Find it in a second',
-    desc: 'Search and filter across everything you\u2019ve saved the moment you need it again.'
+    desc: 'Search, filter, pin your favorites, and sort by whatever\u2019s useful in the moment.'
   }
 ]
 
+const alreadyOnboarded = () => localStorage.getItem('staches_onboarded') === '1'
+
 export default function Onboarding({ onAuth }) {
-  const [stage, setStage] = useState('intro') // intro | auth
+  const [stage, setStage] = useState(alreadyOnboarded() ? 'auth' : 'intro')
   const [slide, setSlide] = useState(0)
-  const [mode, setMode] = useState('login') // login | signup
+  const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  function goToAuth() {
+    localStorage.setItem('staches_onboarded', '1')
+    setStage('auth')
+  }
+
   function nextSlide() {
     if (slide < SLIDES.length - 1) setSlide(slide + 1)
-    else setStage('auth')
+    else goToAuth()
   }
 
   async function handleSubmit(e) {
@@ -55,7 +62,7 @@ export default function Onboarding({ onAuth }) {
 
         {stage === 'intro' ? (
           <>
-            <div className="slide">
+            <div className="slide" key={slide}>
               <span className="slide-mark">{SLIDES[slide].mark}</span>
               <h1>{SLIDES[slide].title}</h1>
               <p>{SLIDES[slide].desc}</p>
@@ -68,7 +75,7 @@ export default function Onboarding({ onAuth }) {
             </div>
 
             <div className="onboarding-actions">
-              <button className="btn-ghost" onClick={() => setStage('auth')}>
+              <button className="btn-ghost" onClick={goToAuth}>
                 Skip
               </button>
               <button className="btn-primary" onClick={nextSlide}>
@@ -93,6 +100,7 @@ export default function Onboarding({ onAuth }) {
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -104,6 +112,7 @@ export default function Onboarding({ onAuth }) {
                   type="password"
                   required
                   minLength={6}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 6 characters"
