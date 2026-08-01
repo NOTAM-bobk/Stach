@@ -1,12 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from './api.js'
 
-const COLORS = ['#4f46e5', '#0ea5e9', '#16a34a', '#d97706', '#dc2626', '#7c3aed']
+const COLORS = ['#e8623f', '#2f6e5c', '#0ea5e9', '#d97706', '#7c3aed', '#c6432f']
 
 function faviconFor(url) {
   try {
     const host = new URL(url).hostname
     return `https://www.google.com/s2/favicons?domain=${host}&sz=64`
+  } catch {
+    return null
+  }
+}
+
+function previewFor(url) {
+  try {
+    new URL(url)
+    return `https://image.thum.io/get/width/500/crop/300/noanimate/${url}`
   } catch {
     return null
   }
@@ -36,11 +45,17 @@ const IconPlus = ({ size } = {}) =>
 const IconSearch = () => icon(<><circle cx="10" cy="10" r="6.5" /><line x1="15" y1="15" x2="20" y2="20" /></>)
 const IconStar = ({ filled }) =>
   icon(<polygon points="12 2.5 15 9 22 9.7 16.8 14.4 18.2 21.3 12 17.7 5.8 21.3 7.2 14.4 2 9.7 9 9" fill={filled ? 'currentColor' : 'none'} />)
-const IconCopy = () => icon(<><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>)
 const IconFolder = () => icon(<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />)
 const IconLayers = () => icon(<><polygon points="12 2 2 7 12 12 22 7" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></>)
 const IconSun = () => icon(<><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="4" /><line x1="12" y1="20" x2="12" y2="22" /><line x1="4.2" y1="4.2" x2="5.6" y2="5.6" /><line x1="18.4" y1="18.4" x2="19.8" y2="19.8" /><line x1="2" y1="12" x2="4" y2="12" /><line x1="20" y1="12" x2="22" y2="12" /><line x1="4.2" y1="19.8" x2="5.6" y2="18.4" /><line x1="18.4" y1="5.6" x2="19.8" y2="4.2" /></>)
 const IconMoon = () => icon(<path d="M20 12.8A8.5 8.5 0 1 1 11.2 4a6.8 6.8 0 0 0 8.8 8.8z" />)
+const IconKebab = () => icon(<><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none" /></>)
+
+const IconStache = ({ className, size = 26 }) => (
+  <svg className={className} viewBox="0 0 48 18" width={size} height={size * 0.375} fill="currentColor">
+    <path d="M24 5.2c-2.6-3.7-8-4.4-12-1.8C8.6 5.5 6.4 7.6 2 6.4c2.8 5 8.6 6.5 12.6 3.4 1.8-1.4 2.8-2.9 3.4-2.9s1.6 1.5 3.4 2.9c4 3.1 9.8 1.6 12.6-3.4-4.4 1.2-6.6-.9-10-3.9-4-3.6-9.4-2.5-12 1.7" />
+  </svg>
+)
 
 export default function Dashboard({ token, user, onLogout }) {
   const [groups, setGroups] = useState([])
@@ -50,10 +65,12 @@ export default function Dashboard({ token, user, onLogout }) {
   const [activeGroup, setActiveGroup] = useState(null) // null = all, 'none' = uncategorized
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState('newest')
+  const [pinnedOnly, setPinnedOnly] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copiedId, setCopiedId] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState(null)
   const [theme, setTheme] = useState(() => localStorage.getItem('staches_theme') || 'light')
 
   const [showLinkModal, setShowLinkModal] = useState(false)
@@ -61,6 +78,7 @@ export default function Dashboard({ token, user, onLogout }) {
   const [showGroupModal, setShowGroupModal] = useState(false)
 
   const searchRef = useRef(null)
+  const menuRef = useRef(null)
 
   const loadGroups = useCallback(async () => {
     try {
@@ -109,6 +127,23 @@ export default function Dashboard({ token, user, onLogout }) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // close the card kebab menu on outside click / escape
+  useEffect(() => {
+    if (openMenuId === null) return
+    function onDocClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpenMenuId(null)
+    }
+    function onEsc(e) {
+      if (e.key === 'Escape') setOpenMenuId(null)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [openMenuId])
+
   function toggleTheme() {
     const next = theme === 'light' ? 'dark' : 'light'
     setTheme(next)
@@ -122,9 +157,14 @@ export default function Dashboard({ token, user, onLogout }) {
   }
 
   async function handleDeleteLink(id) {
-    await api.deleteLink(token, id)
     setLinks(links.filter((l) => l.id !== id))
-    loadGroups()
+    try {
+      await api.deleteLink(token, id)
+      loadGroups()
+    } catch (err) {
+      setError(err.message)
+      loadLinks()
+    }
   }
 
   async function handleTogglePin(link) {
@@ -155,9 +195,15 @@ export default function Dashboard({ token, user, onLogout }) {
     loadLinks()
   }
 
+  const displayedLinks = pinnedOnly ? links.filter((l) => l.pinned) : links
+
   const emptyMessage = search
     ? { title: 'No matches', body: `Nothing found for “${search}”.` }
+    : pinnedOnly
+    ? { title: 'Nothing pinned yet', body: 'Star a link to keep it close at hand.' }
     : { title: 'No links here yet', body: 'Save your first link and it\u2019ll show up in this list.' }
+
+  const initial = (user?.email || '?').charAt(0).toUpperCase()
 
   return (
     <div className="app-shell">
@@ -165,11 +211,16 @@ export default function Dashboard({ token, user, onLogout }) {
 
       <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
         <div className="sidebar-top">
-          <div className="wordmark small">Staches</div>
+          <div className="wordmark small">
+            <IconStache className="stache-icon" size={22} />
+            Staches
+          </div>
           <button className="icon-btn mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
             <IconClose />
           </button>
         </div>
+
+        <div className="sidebar-label">your links</div>
 
         <nav className="group-nav">
           <button
@@ -217,7 +268,10 @@ export default function Dashboard({ token, user, onLogout }) {
 
         <div className="sidebar-footer">
           <div className="footer-row">
-            <span className="user-email">{user.email}</span>
+            <div className="footer-identity">
+              <span className="avatar-circle">{initial}</span>
+              <span className="user-email">{user.email}</span>
+            </div>
             <button className="icon-btn" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
               {theme === 'light' ? <IconMoon /> : <IconSun />}
             </button>
@@ -241,7 +295,13 @@ export default function Dashboard({ token, user, onLogout }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <kbd className="search-kbd">/</kbd>
+            {search ? (
+              <button className="search-clear" onClick={() => setSearch('')} aria-label="Clear search">
+                <IconClose />
+              </button>
+            ) : (
+              <kbd className="search-kbd">/</kbd>
+            )}
           </div>
 
           <select className="sort-select" value={sort} onChange={(e) => setSort(e.target.value)}>
@@ -258,59 +318,107 @@ export default function Dashboard({ token, user, onLogout }) {
           </button>
         </div>
 
+        <div className="filter-row">
+          <button
+            className={!pinnedOnly ? 'filter-chip active' : 'filter-chip'}
+            onClick={() => setPinnedOnly(false)}
+          >
+            All
+          </button>
+          <button
+            className={pinnedOnly ? 'filter-chip active' : 'filter-chip'}
+            onClick={() => setPinnedOnly((v) => !v)}
+          >
+            <IconStar filled={pinnedOnly} /> Pinned
+          </button>
+          {!loading && (
+            <span className="result-count">
+              {displayedLinks.length} link{displayedLinks.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+
         {error && <div className="form-error">{error}</div>}
 
         {loading ? (
-          <div className="empty-state">Loading…</div>
-        ) : links.length === 0 ? (
+          <div className="link-grid">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div className="skeleton-card" key={i} style={{ animationDelay: `${i * 40}ms` }}>
+                <div className="skeleton-shimmer" />
+                <div className="skeleton-lines">
+                  <div className="skeleton-line w70" />
+                  <div className="skeleton-line w45" />
+                  <div className="skeleton-line w30" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : displayedLinks.length === 0 ? (
           <div className="empty-state">
+            <div className="empty-stache"><IconStache size={34} /></div>
             <h3>{emptyMessage.title}</h3>
             <p>{emptyMessage.body}</p>
           </div>
         ) : (
           <div className="link-grid">
-            {links.map((link) => (
-              <div className={link.pinned ? 'link-card pinned' : 'link-card'} key={link.id}>
-                <img
-                  className="favicon"
-                  src={faviconFor(link.url)}
-                  alt=""
-                  onError={(e) => (e.target.style.visibility = 'hidden')}
-                />
-                <div className="link-body">
+            {displayedLinks.map((link, idx) => (
+              <div
+                className={link.pinned ? 'link-card pinned' : 'link-card'}
+                key={link.id}
+                style={{ animationDelay: `${Math.min(idx, 10) * 35}ms` }}
+              >
+                <div className="link-preview">
+                  <LinkPreview url={link.url} />
+                  <div className="preview-controls">
+                    <button
+                      className={link.pinned ? 'preview-btn active' : 'preview-btn'}
+                      title={link.pinned ? 'Unpin' : 'Pin'}
+                      onClick={() => handleTogglePin(link)}
+                    >
+                      <IconStar filled={!!link.pinned} />
+                    </button>
+                    <div className="kebab-wrap" ref={openMenuId === link.id ? menuRef : undefined}>
+                      <button
+                        className="preview-btn"
+                        aria-label="More actions"
+                        onClick={() => setOpenMenuId(openMenuId === link.id ? null : link.id)}
+                      >
+                        <IconKebab />
+                      </button>
+                      {openMenuId === link.id && (
+                        <div className="kebab-menu">
+                          <button onClick={() => handleCopy(link)}>
+                            {copiedId === link.id ? 'Copied ✓' : 'Copy link'}
+                          </button>
+                          <button
+                            onClick={() => { setEditingLink(link); setShowLinkModal(true); setOpenMenuId(null) }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="danger"
+                            onClick={() => { handleDeleteLink(link.id); setOpenMenuId(null) }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="link-body-wrap">
                   <a href={link.url} target="_blank" rel="noreferrer" className="link-title">
                     {link.title || link.url}
                   </a>
                   <span className="link-url">{link.url}</span>
                   <div className="link-meta">
                     {link.group_name && (
-                      <span className="link-tag" style={{ borderColor: link.group_color }}>
+                      <span className="link-tag" style={{ borderColor: link.group_color, color: link.group_color }}>
                         {link.group_name}
                       </span>
                     )}
                     <span className="link-time">{timeAgo(link.created_at)}</span>
                   </div>
-                </div>
-                <div className="link-actions">
-                  <button
-                    className={link.pinned ? 'icon-btn active' : 'icon-btn'}
-                    title={link.pinned ? 'Unpin' : 'Pin'}
-                    onClick={() => handleTogglePin(link)}
-                  >
-                    <IconStar filled={!!link.pinned} />
-                  </button>
-                  <button className="icon-btn" title="Copy link" onClick={() => handleCopy(link)}>
-                    {copiedId === link.id ? <span className="copied-text">✓</span> : <IconCopy />}
-                  </button>
-                  <button
-                    className="text-action"
-                    onClick={() => { setEditingLink(link); setShowLinkModal(true) }}
-                  >
-                    Edit
-                  </button>
-                  <button className="text-action danger-text" onClick={() => handleDeleteLink(link.id)}>
-                    Delete
-                  </button>
                 </div>
               </div>
             ))}
@@ -345,6 +453,27 @@ export default function Dashboard({ token, user, onLogout }) {
       )}
     </div>
   )
+}
+
+// Website preview thumbnail with a graceful fallback to a favicon badge
+function LinkPreview({ url }) {
+  const [failed, setFailed] = useState(false)
+  const thumb = previewFor(url)
+
+  if (failed || !thumb) {
+    return (
+      <div className="link-preview-fallback">
+        <img
+          className="favicon-big"
+          src={faviconFor(url)}
+          alt=""
+          onError={(e) => (e.target.style.visibility = 'hidden')}
+        />
+      </div>
+    )
+  }
+
+  return <img src={thumb} alt="" loading="lazy" onError={() => setFailed(true)} />
 }
 
 function LinkModal({ token, groups, link, onClose, onSaved }) {
